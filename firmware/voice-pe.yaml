@@ -1,0 +1,394 @@
+# SPDX-License-Identifier: MIT
+# Adapted from ESPHome home-assistant-voice-pe d4e6fa43d6a1a7d342b7d4d403567e06516719de.
+# Copyright (c) 2019 ESPHome; MIT for YAML. See upstream-LICENSE.txt.
+# Voice PE only. USB installation; no OTA or XMOS firmware payload.
+# Unmuted microphone audio continuously crosses the local native API link.
+packages:
+  features: !include features.yaml
+esphome:
+  name: grokvoice-pe
+  friendly_name: Grok Voice PE
+  min_version: 2026.10.2
+  project:
+    name: "grokvoice.voice-pe"
+    version: "0.1.0"
+  on_boot:
+    priority: 375
+    then:
+      - delay: 1s
+      - script.execute:
+          id: jack_action
+          plugged: !lambda return id(jack_plugged).state;
+      - binary_sensor.template.publish:
+          id: wake_requested
+          state: OFF
+      - binary_sensor.template.publish:
+          id: talk_requested
+          state: OFF
+      - binary_sensor.template.publish:
+          id: stop_requested
+          state: OFF
+      - binary_sensor.template.publish:
+          id: new_context_requested
+          state: OFF
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 16MB
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+psram:
+  mode: octal
+  speed: 80MHz
+logger:
+  level: INFO
+wifi:
+  id: voice_wifi
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+api:
+  reboot_timeout: 0s
+  batch_delay: 0ms  # Preserve both edges of control pulses.
+  encryption:
+    key: !secret api_encryption_key
+external_components:
+  - source:
+      type: git
+      url: https://github.com/esphome/home-assistant-voice-pe
+      ref: d4e6fa43d6a1a7d342b7d4d403567e06516719de
+      path: esphome/components
+    components: [voice_kit]
+i2c:
+  id: internal_i2c
+  sda: GPIO5
+  scl: GPIO6
+  frequency: 400kHz
+voice_kit:
+  id: voice_kit_component
+  i2c_id: internal_i2c
+  reset_pin: GPIO4
+switch:
+  - platform: gpio
+    id: internal_speaker_amp
+    pin: GPIO47
+    restore_mode: ALWAYS_OFF
+    internal: true
+  - platform: template
+    id: software_mute
+    name: Software Mute
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - script.execute: apply_mute
+    on_turn_off:
+      - script.execute: apply_mute
+binary_sensor:
+  - platform: gpio
+    id: hardware_mute
+    name: Hardware Mute
+    pin: GPIO3
+    on_state:
+      - script.execute: apply_mute
+  - platform: gpio
+    id: stop_button
+    pin:
+      number: GPIO0
+      inverted: true
+    filters:
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+    on_press:
+      - script.execute: hold_click
+    on_release:
+      - if:
+          condition:
+            script.is_running: hold_click
+          then:
+            - script.stop: hold_click
+            - script.execute: talk_action
+  - platform: template
+    id: talk_requested
+    name: Talk Requested
+  - platform: template
+    id: wake_requested
+    name: Wake Requested
+  - platform: template
+    id: stop_requested
+    name: Stop Requested
+  - platform: template
+    id: new_context_requested
+    name: New Context Requested
+  - platform: template
+    id: effective_mute
+    name: Effective Mute
+    on_press:
+      - micro_wake_word.stop:
+      - voice_assistant.stop:
+      - microphone.mute: i2s_mics
+      - script.execute: stop_action
+      - script.execute: feature_render
+      - media_player.speaker.play_on_device_media_file:
+          id: player
+          media_file: feature_mute_on_sound
+          announcement: true
+    on_release:
+      - microphone.unmute: i2s_mics
+      - if:
+          condition:
+            voice_assistant.connected:
+          then:
+            - voice_assistant.start_continuous:
+            - micro_wake_word.start:
+      - script.execute: feature_render
+      - media_player.speaker.play_on_device_media_file:
+          id: player
+          media_file: feature_mute_off_sound
+          announcement: true
+  - platform: gpio
+    id: jack_plugged
+    name: Jack Plugged
+    pin: GPIO17
+    filters:
+      - delayed_on: 200ms
+      - delayed_off: 200ms
+    on_state:
+      - script.execute:
+          id: jack_action
+          plugged: !lambda return x;
+  - platform: template
+    id: output_jack_active
+    name: Output Jack Active
+button:
+  - platform: template
+    name: Talk
+    on_press:
+      - script.execute: talk_action
+  - platform: template
+    name: Stop
+    on_press:
+      - script.execute: stop_action
+  - platform: template
+    name: New Context
+    on_press:
+      - script.execute: new_context_action
+script:
+  - id: hold_click
+    mode: restart
+    then:
+      - delay: 1s
+      - script.execute: new_context_action
+  - id: apply_mute
+    then:
+      - binary_sensor.template.publish:
+          id: effective_mute
+          state: !lambda return id(hardware_mute).state || id(software_mute).state;
+  - id: jack_action
+    parameters:
+      plugged: bool
+    then:
+      - binary_sensor.template.publish:
+          id: output_jack_active
+          state: !lambda return plugged;
+      - if:
+          condition:
+            lambda: return plugged;
+          then:
+            - switch.turn_off: internal_speaker_amp
+          else:
+            - switch.turn_on: internal_speaker_amp
+  - id: talk_action
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: return !id(hardware_mute).state && !id(software_mute).state;
+          then:
+            - if:
+                condition:
+                  voice_assistant.connected:
+                then:
+                  - if:
+                      condition:
+                        lambda: return id(feature_voice_state).state == "idle";
+                      then:
+                        - media_player.stop:
+                            id: player
+                            announcement: true
+                        - script.execute: feature_wake
+                  - binary_sensor.template.publish:
+                      id: talk_requested
+                      state: ON
+                  - delay: 100ms
+                  - binary_sensor.template.publish:
+                      id: talk_requested
+                      state: OFF
+                else:
+                  - script.execute: feature_offline
+  - id: new_context_action
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: return !id(hardware_mute).state && !id(software_mute).state;
+          then:
+            - if:
+                condition:
+                  voice_assistant.connected:
+                then:
+                  - media_player.stop:
+                      id: player
+                      announcement: true
+                  - script.execute: feature_wake
+                  - binary_sensor.template.publish:
+                      id: new_context_requested
+                      state: ON
+                  - delay: 100ms
+                  - binary_sensor.template.publish:
+                      id: new_context_requested
+                      state: OFF
+                else:
+                  - script.execute: feature_offline
+  - id: stop_action
+    mode: queued
+    then:
+      - script.stop: feature_wake
+      - lambda: |-
+          id(feature_requested_state) = "idle";
+          id(feature_chime_active) = false;
+      - script.execute: feature_render
+      - media_player.stop:
+          id: player
+          announcement: true
+      - binary_sensor.template.publish:
+          id: stop_requested
+          state: ON
+      - delay: 100ms
+      - binary_sensor.template.publish:
+          id: stop_requested
+          state: OFF
+i2s_audio:
+  - id: i2s_output
+    i2s_lrclk_pin: GPIO7
+    i2s_bclk_pin: GPIO8
+  - id: i2s_input
+    i2s_lrclk_pin: GPIO14
+    i2s_bclk_pin: GPIO13
+microphone:
+  - platform: i2s_audio
+    id: i2s_mics
+    i2s_din_pin: GPIO15
+    adc_type: external
+    pdm: false
+    sample_rate: 16000
+    bits_per_sample: 32bit
+    i2s_mode: secondary
+    i2s_audio_id: i2s_input
+    channel: stereo
+audio_dac:
+  - platform: aic3204
+    id: aic3204_dac
+    i2c_id: internal_i2c
+speaker:
+  - platform: i2s_audio
+    id: hw_speaker
+    sample_rate: 48000
+    i2s_mode: secondary
+    i2s_dout_pin: GPIO10
+    bits_per_sample: 32bit
+    i2s_audio_id: i2s_output
+    dac_type: external
+    channel: stereo
+    timeout: never
+    buffer_duration: 100ms
+    audio_dac: aic3204_dac
+  - platform: mixer
+    id: mixing_speaker
+    output_speaker: hw_speaker
+    num_channels: 2
+    task_stack_in_psram: true
+    source_speakers:
+      - id: announcement_mixing_input
+        timeout: never
+      - id: media_mixing_input
+        timeout: never
+  - platform: resampler
+    id: reply_speaker
+    output_speaker: announcement_mixing_input
+    sample_rate: 48000
+    bits_per_sample: 16
+  - platform: resampler
+    id: media_resampling_speaker
+    output_speaker: media_mixing_input
+    sample_rate: 48000
+    bits_per_sample: 16
+media_player:
+  - platform: speaker
+    id: player
+    name: Reply
+    volume_initial: 30%
+    announcement_pipeline:
+      speaker: reply_speaker
+      format: WAV
+      sample_rate: 16000
+      num_channels: 1
+voice_assistant:
+  id: va
+  microphone:
+    - microphone: i2s_mics
+      channels: 0
+    - microphone: i2s_mics
+      channels: 1
+  media_player: player
+  use_wake_word: false
+  noise_suppression_level: 0
+  auto_gain: 0 dbfs
+  volume_multiplier: 1
+  on_client_connected:
+    - lambda: |-
+        id(feature_gateway_connected) = true;
+        id(feature_requested_state) = "idle";
+    - script.execute: feature_render
+    - if:
+        condition:
+          lambda: return !id(hardware_mute).state && !id(software_mute).state;
+        then:
+          - voice_assistant.start_continuous:
+          - micro_wake_word.start:
+  on_client_disconnected:
+    - lambda: |-
+        id(feature_gateway_connected) = false;
+        id(feature_client_lost_ms) = millis();
+        id(feature_requested_state) = "idle";
+    - script.execute: stop_action
+    - micro_wake_word.stop:
+    - voice_assistant.stop:
+
+micro_wake_word:
+  microphone:
+    microphone: i2s_mics
+    channels: 1
+    gain_factor: 4
+  stop_after_detection: false
+  models:
+    - model: https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.json
+      id: okay_nabu
+  on_wake_word_detected:
+    - if:
+        condition:
+          lambda: |-
+            return id(feature_gateway_connected) && !id(hardware_mute).state &&
+                   !id(software_mute).state && id(feature_requested_state) == "idle" &&
+                   id(feature_voice_state).state == "idle" && !id(feature_chime_active) &&
+                   id(player).state == media_player::MEDIA_PLAYER_STATE_IDLE;
+        then:
+          # Reserve listening before the pulse so duplicate detections cannot start again.
+          - script.execute: feature_wake
+          - binary_sensor.template.publish:
+              id: wake_requested
+              state: true
+          - delay: 100ms
+          - binary_sensor.template.publish:
+              id: wake_requested
+              state: false

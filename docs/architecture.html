@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Voice PE architecture</title><style>
+body { margin: 0; background: #f5f5f5; color: #2d3142; }
+.diagram-container { width: 100%; overflow-x: auto; }
+svg { display: block; width: 100%; min-width: 960px; }
+@media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+</style></head><body><main class="diagram-container"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-labelledby="architecture-title architecture-desc">
+<title id="architecture-title">Voice PE to Grok: audio and controls</title>
+<desc id="architecture-desc">On-device button or Okay Nabu starts a gateway-managed Grok session, with encrypted microphone transport and local HTTP speaker replies.</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0 0 L8 3 L0 6Z" fill="#2e5aa8"/></marker></defs>
+<rect width="960" height="600" fill="#f5f5f5"/>
+<text x="40" y="72" font-family="'Instrument Serif',serif" font-size="28" fill="#2d3142">Voice PE → gateway → Grok</text>
+<text x="40" y="108" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Local wake detection. Cloud audio only during an accepted call.</text>
+<path d="M240 248 H360" stroke="#2e5aa8" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M360 312 H240" stroke="#2e5aa8" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+<path d="M600 248 H720" stroke="#2e5aa8" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M720 312 H600" stroke="#2e5aa8" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+<rect x="248" y="220" width="104" height="16" fill="#f5f5f5"/><text x="300" y="232" text-anchor="middle" font-family="'Geist Mono',monospace" font-size="8" fill="#2e5aa8">API / PCM + control</text>
+<rect x="248" y="284" width="104" height="16" fill="#f5f5f5"/><text x="300" y="296" text-anchor="middle" font-family="'Geist Mono',monospace" font-size="8" fill="#2e5aa8">HTTP / WAV</text>
+<rect x="608" y="220" width="104" height="16" fill="#f5f5f5"/><text x="660" y="232" text-anchor="middle" font-family="'Geist Mono',monospace" font-size="8" fill="#2e5aa8">WSS / PCM</text>
+<rect x="608" y="284" width="104" height="16" fill="#f5f5f5"/><text x="660" y="296" text-anchor="middle" font-family="'Geist Mono',monospace" font-size="8" fill="#2e5aa8">WSS / REPLY</text>
+<rect x="40" y="184" width="200" height="192" rx="8" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1.5"/>
+<text x="56" y="216" font-family="'Geist',system-ui,sans-serif" font-size="12" font-weight="600" fill="#2d3142">Voice PE</text>
+<text x="56" y="252" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Button / Okay Nabu</text>
+<text x="56" y="284" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Microphone + mute</text>
+<text x="56" y="316" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Speaker playback</text>
+<rect x="360" y="184" width="240" height="192" rx="8" fill="#f5f5f5" stroke="#bf4520" stroke-width="1.5"/>
+<text x="376" y="216" font-family="'Geist',system-ui,sans-serif" font-size="12" font-weight="600" fill="#2d3142">Python gateway</text>
+<text x="376" y="252" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Encrypted ESPHome API</text>
+<text x="376" y="284" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Discard idle microphone audio</text>
+<text x="376" y="316" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Manage session + stream replies</text>
+<rect x="720" y="184" width="200" height="192" rx="8" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1.5"/>
+<text x="736" y="216" font-family="'Geist',system-ui,sans-serif" font-size="12" font-weight="600" fill="#2d3142">Grok realtime</text>
+<text x="736" y="252" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Authorized provider session</text>
+<text x="736" y="284" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Voice activity + response</text>
+<text x="736" y="316" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Secure WebSocket</text>
+<text x="40" y="424" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Device ↔ gateway: trusted LAN; reply HTTP is plaintext.</text>
+<text x="40" y="456" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Gateway auth: separate Hermes Agent on Python 3.14; operator-owned OAuth account.</text>
+<text x="40" y="488" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">After playback: eight-second follow-up. Button or mute ends the call.</text>
+<line x1="40" y1="548" x2="72" y2="548" stroke="#2e5aa8" stroke-width="1.5"/>
+<text x="88" y="552" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Capture / control</text>
+<line x1="280" y1="548" x2="312" y2="548" stroke="#2e5aa8" stroke-dasharray="5 4" stroke-width="1.5"/>
+<text x="328" y="552" font-family="'Geist',system-ui,sans-serif" font-size="12" fill="#4f5d75">Reply audio</text>
+</svg></main></body></html>

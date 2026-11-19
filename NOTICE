@@ -1,0 +1,16 @@
+grokvoice-for-esp32
+Copyright 2026 grokvoice-for-esp32 contributors
+
+The project's own code is licensed under Apache-2.0.
+Retained third-party notices and dependency terms remain in effect:
+
+- Hermes Talk and Hermes Agent: MIT. See licenses/hermes-talk-MIT.txt,
+  licenses/hermes-agent-MIT.txt and licenses/hermes-talk-THIRD_PARTY_NOTICES.md
+  (including the retained OpenClaw MIT notice).
+- ESPHome Home Assistant Voice PE: adapted firmware YAML, MIT. The firmware
+  YAML files, including this project's changes to them, are MIT-licensed; external
+  C/C++ runtime, GPL-3.0. See firmware/upstream-LICENSE.txt and
+  firmware/PROVENANCE.md. No compiled firmware is distributed here.
+
+Okay Nabu is fetched at build time, not vendored. Its model/asset redistribution
+terms and hosted-provider permissions are separate; see docs/provenance.md.

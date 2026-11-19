@@ -1,0 +1,4 @@
+# Public pinned wire package; Hermes auth uses its separate supported environment.
+hermes-talk @ https://github.com/TheSmokeDev/hermes-talk/archive/3b8f88bc9b39e7916523964debdce504af4d4990.tar.gz#sha256=ea72e33617b0e95fcbdab22888c2dbe9dc1bc89cddffc448cf7dd86d8afd0f95
+httpx==0.28.1
+aiohttp==3.13.2

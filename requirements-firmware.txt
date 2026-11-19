@@ -1,0 +1,2 @@
+# Install in a Python 3.12 virtual environment. This is not a transitive lock.
+esphome==2026.10.2

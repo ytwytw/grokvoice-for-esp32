@@ -1,0 +1,272 @@
+# SPDX-License-Identifier: MIT
+# Adapted from ESPHome home-assistant-voice-pe d4e6fa43d6a1a7d342b7d4d403567e06516719de.
+# Copyright (c) 2019 ESPHome; MIT for YAML. See upstream-LICENSE.txt.
+api:
+  actions:
+    - action: set_voice_state
+      variables:
+        state: string
+      then:
+        - if:
+            condition:
+              lambda: return state == "listening";
+            then:
+              - if:
+                  condition:
+                    lambda: return id(feature_requested_state) != "listening";
+                  then:
+                    - script.execute: feature_wake
+            else:
+              - lambda: |-
+                  if (state == "idle" || state == "thinking" || state == "speaking" || state == "error" || state == "listening_followup") {
+                    id(feature_requested_state) = state;
+                  } else {
+                    ESP_LOGW("features", "Rejected unknown or hardware-owned voice state");
+                  }
+              - script.execute: feature_render
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - script.execute: feature_render
+
+interval:
+  - interval: 1s
+    then:
+      - script.execute: feature_render
+
+globals:
+  - id: feature_gateway_connected
+    type: bool
+    initial_value: 'false'
+  - id: feature_client_lost_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: feature_requested_state
+    type: std::string
+    initial_value: '"idle"'
+  - id: feature_volume_tick_pending
+    type: bool
+    initial_value: 'false'
+  - id: feature_volume_visible
+    type: bool
+    initial_value: 'false'
+  - id: feature_chime_active
+    type: bool
+    initial_value: 'false'
+
+number:
+  - platform: template
+    id: feature_led_brightness
+    name: LED Brightness
+    unit_of_measurement: "%"
+    mode: slider
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 66  # Official led_ring.initial_state brightness.
+    optimistic: true
+    restore_value: true
+    # Setup publishes this value before the LED buffer exists; the interval renders it.
+
+text_sensor:
+  - platform: template
+    id: feature_voice_state
+    name: Voice State
+    update_interval: never
+
+binary_sensor:
+  - id: !extend hardware_mute
+    name: Hardware Mute
+    internal: false
+
+power_supply:
+  - id: feature_led_power
+    pin: GPIO45
+
+light:
+  - platform: esp32_rmt_led_strip
+    id: feature_ring
+    internal: true
+    pin: GPIO21
+    bit0_high: 300ns
+    bit0_low: 975ns
+    bit1_high: 650ns
+    bit1_low: 650ns
+    reset_low: 300us
+    reset_high: 0us
+    max_refresh_rate: 15ms
+    num_leds: 12
+    rgb_order: GRB
+    rmt_symbols: 192
+    default_transition_length: 0ms
+    restore_mode: ALWAYS_OFF
+    power_supply: feature_led_power
+    effects:
+      - addressable_lambda:
+          name: Gateway Disconnected
+          update_interval: 100ms
+          lambda: |-
+            it.all() = (millis() / 500) % 2 == 0 ? Color(255, 0, 0) : Color::BLACK;
+      - addressable_lambda:
+          name: Volume Display
+          update_interval: 50ms
+          lambda: |-
+            const float level = 12.0f * id(player).volume;
+            for (uint8_t i = 0; i < 12; i++) {
+              const float fraction = std::max(0.0f, std::min(1.0f, level - i));
+              it[(6+i)%12] = Color(0, uint8_t(255 * fraction), 0);
+            }
+            if (level == 0.0f) it[6] = Color(255, 0, 0);
+
+sensor:
+  - platform: rotary_encoder
+    id: feature_dial
+    internal: true
+    pin_a: GPIO16
+    pin_b: GPIO18
+    resolution: 2
+    on_clockwise:
+      - logger.log: "input=knob_up hardware=true"
+      - script.execute: feature_volume_up
+    on_anticlockwise:
+      - logger.log: "input=knob_down hardware=true"
+      - script.execute: feature_volume_down
+
+media_player:
+  - id: !extend player
+    volume_min: 0.0
+    volume_max: 1.0
+    volume_increment: 0.05
+    files:
+      - id: feature_volume_tick_sound
+        file: assets/volume_tick.wav
+      - id: feature_mute_on_sound
+        file: assets/mute_on.wav
+      - id: feature_mute_off_sound
+        file: assets/mute_off.wav
+      - id: feature_offline_sound
+        file: assets/offline.wav
+      - id: feature_wake_sound
+        file: assets/wake.wav
+    # on_volume runs after the player's queued volume command has been applied.
+    on_volume:
+      - if:
+          condition:
+            lambda: return id(feature_volume_tick_pending);
+          then:
+            - lambda: id(feature_volume_tick_pending) = false;
+            - if:
+                condition:
+                  lambda: return x > 0.0f && id(player).state == media_player::MEDIA_PLAYER_STATE_IDLE && id(feature_requested_state) != "speaking";
+                then:
+                  - script.execute: feature_volume_tick
+    on_state:
+      - script.execute: feature_render
+    on_idle:
+      - lambda: |-
+          id(feature_chime_active) = false;
+          // Gateway owns conversation state, including the post-playback follow-up window.
+      - script.execute: feature_render
+
+script:
+  - id: feature_volume_tick
+    then:
+      - lambda: id(feature_chime_active) = true;
+      - media_player.speaker.play_on_device_media_file:
+          id: player
+          media_file: feature_volume_tick_sound
+          announcement: true
+          enqueue: false
+  - id: feature_volume_up
+    then:
+      - media_player.volume_up: player
+      - script.execute: feature_show_volume
+  - id: feature_volume_down
+    then:
+      - media_player.volume_down: player
+      - script.execute: feature_show_volume
+  - id: feature_offline
+    mode: restart
+    then:
+      - script.stop: feature_wake
+      - media_player.stop:
+          id: player
+          announcement: true
+      - lambda: |-
+          id(feature_requested_state) = "disconnected";
+          id(feature_chime_active) = true;
+      - script.execute: feature_render
+      - media_player.speaker.play_on_device_media_file:
+          id: player
+          media_file: feature_offline_sound
+          announcement: true
+  - id: feature_render
+    then:
+      - lambda: |-
+          std::string state = id(feature_requested_state);
+          if (id(hardware_mute).state || id(software_mute).state) state = "muted";
+          else if (!id(voice_wifi).is_connected()) state = "wifi_connecting";
+          else if (!id(feature_gateway_connected) &&
+                   uint32_t(millis() - id(feature_client_lost_ms)) >= 10000) state = "disconnected";
+          else if (state != "error" && state != "disconnected" && !id(feature_chime_active) &&
+                   (id(player).state == media_player::MEDIA_PLAYER_STATE_PLAYING ||
+                    id(player).state == media_player::MEDIA_PLAYER_STATE_ANNOUNCING)) state = "speaking";
+          if (id(feature_voice_state).state != state) id(feature_voice_state).publish_state(state);
+          auto call = id(feature_ring).turn_on();
+          call.set_brightness(id(feature_led_brightness).state / 100.0f);
+          call.set_effect("None");
+          if (state == "muted") call.set_rgb(1, 0, 0);
+          else if (state == "wifi_connecting") call.set_rgb(1, 0.8f, 0);
+          else if (state == "disconnected") {
+            call.set_rgb(1, 0, 0);
+            call.set_effect("Gateway Disconnected");
+          }
+          else if (id(feature_volume_visible)) {
+            call.set_rgb(0, 1, 0);
+            call.set_effect("Volume Display");
+          } else if (state == "listening" || state == "listening_followup") call.set_rgb(0, 1, 0);
+          else if (state == "thinking") call.set_rgb(0.6f, 0, 1);
+          else if (state == "speaking") call.set_rgb(0, 0.5f, 1);
+          else if (state == "error") call.set_rgb(1, 0.3f, 0);
+          else if (id(player).volume == 0.0f) {
+            call.set_rgb(0, 1, 0);
+            call.set_effect("Volume Display");
+          } else call.set_state(false);
+          call.perform();
+  - id: feature_show_volume
+    mode: restart
+    then:
+      - lambda: |-
+          id(feature_volume_visible) = true;
+          id(feature_volume_tick_pending) = true;
+      - script.execute: feature_render
+      - delay: 1s
+      - lambda: id(feature_volume_visible) = false;
+      - sensor.rotary_encoder.set_value:
+          id: feature_dial
+          value: 0
+      - script.execute: feature_render
+  - id: feature_wake
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: return !id(hardware_mute).state && !id(software_mute).state;
+          then:
+            - lambda: |-
+                id(feature_requested_state) = "listening";
+                id(feature_chime_active) = true;
+            - script.execute: feature_render
+            # Base button handler stops the previous reply in this same loop.
+            - delay: 20ms
+            - if:
+                condition:
+                  lambda: return !id(hardware_mute).state && !id(software_mute).state;
+                then:
+                  - lambda: id(feature_chime_active) = true;
+                  - media_player.speaker.play_on_device_media_file:
+                      id: player
+                      media_file: feature_wake_sound
+                      announcement: true

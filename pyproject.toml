@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grokvoice-for-esp32"
+version = "0.1.0"
+description = "A one-device Voice PE gateway for authorized Grok account access"
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "licenses/*", "firmware/upstream-LICENSE.txt"]
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements-runtime.txt", "requirements-provider.txt"]}
+
+[project.scripts]
+grokvoice = "gateway.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["gateway*"]
