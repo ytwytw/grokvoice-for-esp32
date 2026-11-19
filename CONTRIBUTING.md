@@ -11,8 +11,7 @@ for a behavior fix. Use fake devices and providers in tests.
 
 Firmware changes need the separate environment, generated tones and
 `esphome config firmware/voice-pe.yaml` described in
-[the build guide](docs/build-and-run.md). Configuration validation does not prove
-a firmware compile or a real conversation works. State which checks you skipped.
+[the build guide](docs/build-and-run.md). Include the checks you ran in the pull request.
 
 Keep credentials, account data, recordings, device identifiers and local network
 details out of commits, screenshots and issues. See [SECURITY.md](SECURITY.md).

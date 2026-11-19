@@ -3,7 +3,6 @@
 This guide builds firmware locally for **Home Assistant Voice Preview Edition**
 only. Set up the separate gateway using the [gateway guide](gateway.md). No firmware
 binaries are provided; build your own image with your own Wi-Fi and ESPHome encryption key.
-The source recipe has not yet passed a firmware compile or a hardware test.
 
 ## What you need
 
@@ -35,8 +34,8 @@ esphome version
 ```
 
 The last command must report `Version: 2026.10.2`. In a new terminal, activate
-the same virtual environment again. Keep it separate from the gateway environment. The requirements file pins ESPHome; it is
-not a complete dependency lock or a promise of bit-for-bit reproducible output.
+the same virtual environment again. Keep it separate from the gateway environment.
+The requirements file pins ESPHome; pip resolves its dependencies during installation.
 
 ## 2. Supply your local settings
 
@@ -78,7 +77,7 @@ esphome config firmware/voice-pe.yaml
 
 The generator creates the local WAV feedback assets used by `features.yaml`.
 Validation should finish with `Configuration is valid!`. It checks YAML,
-components and references; it does not compile, flash or prove audio works.
+components and references. Compile the firmware in the next step.
 Do not add `--show-secrets` when saving or sharing validation output.
 
 Inputs are [voice-pe.yaml](../firmware/voice-pe.yaml), its included
@@ -146,17 +145,7 @@ To go back to the official Home Assistant firmware, use the official
 [Voice PE web installer](https://esphome.github.io/home-assistant-voice-pe/)
 in a desktop Chrome or Edge browser with the device on USB.
 
-## 6. Gateway and use are separate
+## 6. Start the gateway
 
-The Python gateway connects to the encrypted native API, handles control entities
-and serves reply audio. Follow the [gateway installation guide](gateway.md).
-Its offline tests do not establish successful device or live Grok operation.
-
-When the gateway is connected, the transport sends microphone audio over the LAN
-while connected and unmuted, including when idle. On-device Okay Nabu does not
-make that LAN stream trigger-only. The gateway discards idle audio and opens
-cloud upload only after an accepted button or idle, unmuted Okay Nabu trigger.
-Hardware mute stops capture. Keep the device and reply-audio service on a trusted LAN.
-
-After building, leave the Python environment with `deactivate`. No device or
-gateway process was started by these build commands.
+Leave the firmware environment with `deactivate`. Follow the [gateway
+installation guide](gateway.md), then [start a conversation](user-guide.md).

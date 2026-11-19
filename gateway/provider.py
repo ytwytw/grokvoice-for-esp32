@@ -38,7 +38,7 @@ def safe_reason(exc):
     return type(exc).__name__
 
 
-def _configuration():
+def _configuration(header_vars=()):
     if os.environ.get("TALK_PREFER_XAI_OAUTH") != "true" or any(
         os.environ.get(key) for key in ("XAI_API_KEY", "TALK_XAI_API_KEY")
     ):
@@ -54,13 +54,15 @@ def _configuration():
         if not os.environ.get(name) or not path.is_absolute():
             raise RuntimeError(f"{name.lower()}_absolute_path_required")
         paths.append(path)
-    return (*paths, email)
+    return (*paths, email, header_vars)
 
 
 def _auth_process(config, mode):
-    source, python, home, email = config
-    env = dict(os.environ, HERMES_HOME=str(home), GROK_EXPECTED_EMAIL=email)
-    env.pop("ESPHOME_NOISE_PSK", None)
+    source, python, home, email, header_vars = config
+    env = os.environ.copy()
+    for name in ("ESPHOME_NOISE_PSK", *header_vars):
+        env.pop(name, None)
+    env.update(HERMES_HOME=str(home), GROK_EXPECTED_EMAIL=email)
     try:
         result = subprocess.run(
             [str(python), "-c", _AUTH_SHIM.read_text(), mode],
@@ -77,9 +79,9 @@ def _auth_process(config, mode):
         raise RuntimeError(f"hermes_{mode}_failed") from None
 
 
-def validate_environment():
+def validate_environment(header_vars=()):
     """Local config, pinned source and full auth/wire imports; never load tokens."""
-    config = _configuration()
+    config = _configuration(header_vars)
     try:
         import aiohttp
         import httpx
@@ -116,9 +118,9 @@ def _credentials(config):
         return auth
 
 
-async def normal_oauth_cloud(log=None, *, instructions=None, tools=()):
+async def normal_oauth_cloud(log=None, *, instructions=None, tools=(), header_vars=()):
     """Open a real OAuth-only session after an accepted device trigger."""
-    config = _configuration()
+    config = _configuration(header_vars)
     from aiohttp import WSServerHandshakeError
     from talk_grok_realtime import _GrokWireSession, build_session_update
     from talk_realtime import SessionSetup

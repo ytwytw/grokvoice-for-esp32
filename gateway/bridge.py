@@ -125,7 +125,7 @@ class Bridge:
     only while idle. A button toggles the call; a long press starts a fresh context.
     """
     def __init__(self, device, replies, cloud_factory, *, session_seconds=300,
-                 input_buffer_seconds=32, followup_seconds=8, reply_gain_db=0):
+                 input_buffer_seconds=32, followup_seconds=8, reply_gain_db=0, tools_enabled=False):
         if not math.isfinite(session_seconds) or not 0 < session_seconds <= 300:
             raise ValueError('session_seconds must be in (0, 300]')
         if not math.isfinite(input_buffer_seconds) or not 8 <= input_buffer_seconds <= 300:
@@ -137,7 +137,8 @@ class Bridge:
         self.device, self.replies, self.cloud_factory = device, replies, cloud_factory
         self.session_seconds, self.followup_seconds = session_seconds, followup_seconds
         self.reply_gain_db = reply_gain_db
-        self.first_audio_timeout, self.speech_grace_seconds = 15, 6
+        self.first_audio_timeout = session_seconds if tools_enabled else 15
+        self.speech_grace_seconds = 6
         self.tx_limit, self.tx_bytes = int(input_buffer_seconds * 32000), 0
         self.tx = asyncio.Queue()
         self.lock = asyncio.Lock()
@@ -190,11 +191,11 @@ class Bridge:
         await self.device.state('listening')
         self.task = asyncio.create_task(self.turn(self.epoch))
 
-    async def control(self, action):
+    async def control(self, action, *, muted_at_request=False):
         async with self.lock:
             if action == 'stop':
                 await self.reset()
-            elif self.muted and not self.closed:
+            elif (muted_at_request or self.muted) and not self.closed:
                 if action in ('wake', 'talk', 'new_context') and not self.active:
                     await self.device.state('idle')
             elif not self.closed and not self.muted:
@@ -504,7 +505,7 @@ async def connect_forever(api_factory, bridge_factory, stop, retry_seconds=2):
                     elif previous is False and levels[state.key] is True:
                         action = actions.get(state.key)
                     if action is not None:
-                        task = asyncio.create_task(bridge.control(action))
+                        task = asyncio.create_task(bridge.control(action, muted_at_request=bridge.muted))
                         controls.add(task)
                         task.add_done_callback(control_done)
 

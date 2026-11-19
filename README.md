@@ -5,11 +5,8 @@ and your own authorized Grok account. Say **“Okay Nabu”** or press the cente
 to start a conversation. Replies stream back through the speaker. A Home Assistant
 server is not required.
 
-This repository ships source code. The gateway passes offline tests, and ESPHome
-validates the firmware configuration. A full firmware build and a conversation
-on a real speaker are still unverified. Check that your account has permission
-to use Grok realtime through OAuth before setting up the device.
-[Account requirements](docs/provider.md)
+Use your own account with permission to access Grok realtime through OAuth.
+See the [account requirements](docs/provider.md).
 
 ## How it works
 
@@ -30,8 +27,8 @@ have eight seconds to ask a follow-up question. The mute switch ends the call.
 You need one Voice PE, a USB-C data cable and suitable USB power, a trusted
 2.4 GHz Wi-Fi LAN, Git, Python 3.12 for ESPHome and the
 gateway, and a separate Hermes Agent installation on Python 3.14 for sign-in
-(Hermes also needs git-lfs and Node.js 26+ with pnpm).
-The gateway is intended to run on Linux. The offline checks also run on macOS.
+(Hermes also needs git-lfs and Node.js 26+).
+Run the gateway on Linux. Use macOS or Linux to prepare the firmware.
 
 ```sh
 git clone https://github.com/ytwytw/grokvoice-for-esp32.git
@@ -42,14 +39,15 @@ cd grokvoice-for-esp32
 2. [Build the Voice PE firmware](docs/build-and-run.md). Create a unique device key and use the same key when you set up the gateway. The recipe uses USB for installation and updates.
 3. [Install, check and start the gateway](docs/gateway.md). Run it on a computer the speaker can reach.
 4. [Start your first conversation](docs/user-guide.md). The guide covers the button, wake word, mute switch and follow-up timing.
+5. Optionally [add web search, X search or a remote MCP server](docs/tools.md) with `GROK_TOOLS_FILE`.
 
 ## Limitations
 
 This version supports one speaker. Reply audio uses plaintext HTTP on a trusted
 LAN; keep its port off the public internet. Speech cannot interrupt playback.
 You must build the firmware yourself. There are no prebuilt images, custom wake
-models, search tools or reminders. Hardware and live provider access remain
-unverified; offline checks are not proof of either.
+models or built-in reminders. Tools are optional and require a local configuration
+file; see the [tools guide](docs/tools.md).
 
 ## Contributing and security
 
@@ -63,5 +61,5 @@ The project's own code is licensed under [Apache-2.0](LICENSE). The firmware
 YAML in `firmware/` is adapted from ESPHome and stays MIT, including this
 project's changes.
 Retained third-party materials keep their original notices; see [NOTICE](NOTICE)
-and [provenance and release limits](docs/provenance.md). Model redistribution
+and [source and dependency licenses](docs/provenance.md). Model redistribution
 rights and permission to use the hosted provider are separate from this license.

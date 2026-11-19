@@ -468,6 +468,18 @@ class ConnectionTests(unittest.IsolatedAsyncioTestCase):
         await eventually(lambda: not self.bridges[0].active)
         self.assertTrue(self.wires[0].closed)
 
+    async def test_unmute_cannot_accept_an_earlier_trigger(self):
+        self.api.unmute()
+        self.api.sensor('Effective Mute', True)
+        await asyncio.sleep(.01)
+        self.api.pulse('Talk Requested')
+        self.api.sensor('Effective Mute', False)
+        await asyncio.sleep(.02)
+        self.assertFalse(self.wires)
+        self.assertFalse(self.bridges[0].active)
+        self.api.pulse('Talk Requested')
+        await eventually(lambda: bool(self.wires))
+
     async def test_mute_missing_state_and_disconnect_fail_closed(self):
         self.api.unmute()
         await asyncio.sleep(.01)

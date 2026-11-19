@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import base64
 import binascii
+from functools import partial
 import logging
 import os
 import signal
@@ -23,7 +24,7 @@ def parser():
     return result
 
 
-def validate(args):
+def validate(args, header_vars=()):
     if not args.host.strip() or any(c.isspace() for c in args.host) or '/' in args.host:
         raise ValueError('host must be one hostname or IP address')
     if not 1 <= args.http_port <= 65535:
@@ -33,7 +34,8 @@ def validate(args):
         port = url.port
     except ValueError:
         raise ValueError('base-url must contain a valid host and port') from None
-    if (url.scheme != 'http' or not url.hostname or url.username or url.password
+    if (url.scheme != 'http' or not url.hostname or url.username is not None
+            or any(c.isspace() or ord(c) < 32 or c in '\\\x7f' for c in args.base_url)
             or url.path not in ('', '/') or url.query or url.fragment):
         raise ValueError('base-url must be an HTTP origin, for example http://gateway.local:8765')
     if (80 if port is None else port) != args.http_port:
@@ -47,15 +49,16 @@ def validate(args):
     if key == bytes(range(32)):
         raise ValueError('replace the public example encryption key on the device and gateway')
     from .provider import validate_environment
-    validate_environment()
+    validate_environment(header_vars)
     from aioesphomeapi import APIClient  # noqa: F401
     from .bridge import Bridge, Replies, connect_forever, serve  # noqa: F401
 
 
-async def run(args):
+async def run(args, tools=(), header_vars=()):
     from aioesphomeapi import APIClient
     from .bridge import Bridge, Replies, connect_forever, serve
     from .provider import normal_oauth_cloud
+    cloud = partial(normal_oauth_cloud, tools=tools, header_vars=header_vars)
     replies = Replies(args.base_url.rstrip('/'))
     server = serve(replies, args.bind, args.http_port)
     stop = asyncio.Event()
@@ -66,7 +69,7 @@ async def run(args):
         await connect_forever(
             lambda: APIClient(args.host, 6053, password=None,
                               noise_psk=os.environ['ESPHOME_NOISE_PSK'], client_info='grokvoice'),
-            lambda device: Bridge(device, replies, normal_oauth_cloud), stop)
+            lambda device: Bridge(device, replies, cloud, tools_enabled=bool(tools)), stop)
     finally:
         replies.clear()
         await asyncio.to_thread(server.shutdown)
@@ -77,13 +80,15 @@ def main(argv=None):
     cli = parser()
     args = cli.parse_args(argv)
     try:
-        validate(args)
+        from .tools import load_tools
+        tools, header_vars = load_tools(os.environ.get("GROK_TOOLS_FILE"))
+        validate(args, header_vars)
         if args.check:
             print('Configuration and imports OK; no device, account, or provider connection attempted.')
         else:
             logging.basicConfig(format='%(name)s %(levelname)s %(message)s')
             logging.getLogger('gateway').setLevel(logging.INFO)
-            asyncio.run(run(args))
+            asyncio.run(run(args, tools, header_vars))
     except KeyboardInterrupt:
         return 130
     except ValueError as exc:

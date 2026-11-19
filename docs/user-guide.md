@@ -1,6 +1,6 @@
 # User guide
 
-This guide describes the v1 controls. Prepare the [firmware](build-and-run.md) and [gateway](gateway.md) first. Live device and Grok operation have not been verified for this extracted source tree. Account-specific permission and service entitlement are required; see the [provider guide](provider.md).
+Prepare the [firmware](build-and-run.md) and [gateway](gateway.md) first. For account access and sign-in, see the [provider guide](provider.md).
 
 ## Talk to Grok
 

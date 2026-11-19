@@ -7,7 +7,7 @@ option. Do not post exploit details, credentials or account data in a public
 issue.
 
 Include the affected version, impact and a minimal reproduction with synthetic
-values. No response-time or supported-release guarantee is offered yet.
+values.
 
 ## What never to commit or share
 

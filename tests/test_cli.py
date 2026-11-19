@@ -30,6 +30,11 @@ class CLITests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 validate(self.args('--base-url', url))
 
+    def test_malformed_reply_origin_rejected_before_credentials(self):
+        for origin in ("http://@host:8765", "http://bad host:8765", "http://host:\n8765"):
+            with self.subTest(origin=origin), self.assertRaisesRegex(ValueError, "base-url"):
+                validate(self.args('--base-url', origin))
+
     def test_startup_hides_external_error_text(self):
         output = io.StringIO()
         with patch('gateway.__main__.validate', side_effect=RuntimeError('sensitive detail')):

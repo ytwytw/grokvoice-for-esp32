@@ -21,7 +21,7 @@ from gateway.vendor import hermes_auth
 
 ENV = {
     "TALK_PREFER_XAI_OAUTH": "true", "GROK_ACCOUNT_AUTHORIZED": "true",
-    "GROK_EXPECTED_EMAIL": "owner@example.invalid", "HERMES_SOURCE": "/path/to/hermes-agent",
+    "GROK_EXPECTED_EMAIL": "owner@example.com", "HERMES_SOURCE": "/path/to/hermes-agent",
     "HERMES_PYTHON": "/path/to/hermes-python/bin/python3.14", "HERMES_HOME": "/path/to/hermes-data",
 }
 FORMAT = {"type": "audio/pcm", "rate": 24000}
@@ -34,7 +34,7 @@ NORMALIZED_ACK = {"type": "session.updated", "session": {
 }}
 
 
-def identity(email="owner@example.invalid"):
+def identity(email="owner@example.com"):
     payload = base64.urlsafe_b64encode(json.dumps({"email": email}).encode()).decode().rstrip("=")
     return {"tokens": {"id_token": f"header.{payload}.signature"}}
 
@@ -90,6 +90,13 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(kwargs["env"]["GROK_EXPECTED_EMAIL"], ENV["GROK_EXPECTED_EMAIL"])
         self.assertNotIn("ESPHOME_NOISE_PSK", kwargs["env"])
 
+    def test_mcp_header_variables_stay_out_of_auth_subprocess(self):
+        result = SimpleNamespace(returncode=0, stdout='{"ready":true}')
+        with patch.dict(os.environ, {"MANUALS_AUTH": "sample"}), \
+             patch.object(provider.subprocess, "run", return_value=result) as run:
+            provider._auth_process(provider._configuration(("MANUALS_AUTH",)), "preflight")
+        self.assertNotIn("MANUALS_AUTH", run.call_args.kwargs["env"])
+
     def test_safe_reason_never_uses_arbitrary_exception_text(self):
         class PrivateError(RuntimeError):
             def __str__(self):
@@ -135,7 +142,7 @@ class HermesShimTests(unittest.TestCase):
                 state = {"refreshed": False}
                 def tokens():
                     wrong = mismatch == ("after_email" if state["refreshed"] else "before_email")
-                    return identity("other@example.invalid" if wrong else "owner@example.invalid")
+                    return identity("other@example.com" if wrong else "owner@example.com")
                 def active():
                     wrong = mismatch == ("after_provider" if state["refreshed"] else "before_provider")
                     return "other" if wrong else "xai-oauth"
@@ -152,9 +159,9 @@ class HermesShimTests(unittest.TestCase):
                     self.assertFalse(state["refreshed"])
                     if mismatch:
                         with self.assertRaises(RuntimeError):
-                            hermes_auth.run("refresh", "owner@example.invalid")
+                            hermes_auth.run("refresh", "owner@example.com")
                     else:
-                        self.assertEqual(hermes_auth.run("refresh", "owner@example.invalid")["provider"], "xai-oauth")
+                        self.assertEqual(hermes_auth.run("refresh", "owner@example.com")["provider"], "xai-oauth")
 
     def test_missing_or_malformed_identity_is_a_fixed_code(self):
         auth = SimpleNamespace(get_active_provider=lambda: "xai-oauth")
@@ -163,7 +170,7 @@ class HermesShimTests(unittest.TestCase):
             with self.subTest(token=token):
                 xai = SimpleNamespace(_read_xai_oauth_tokens=lambda: {"tokens": {"id_token": token}})
                 with self.assertRaisesRegex(RuntimeError, "^account_identity_unavailable$"):
-                    hermes_auth._account(auth, xai, "owner@example.invalid")
+                    hermes_auth._account(auth, xai, "owner@example.com")
 
     def test_shim_only_emits_allowlisted_error_codes(self):
         class AuthError(RuntimeError):
@@ -181,7 +188,7 @@ class HermesShimTests(unittest.TestCase):
         def tokens():
             print("private-token")
             print("private-token", file=sys.stderr)
-            return identity("other@example.invalid")
+            return identity("other@example.com")
         auth = SimpleNamespace(get_active_provider=lambda: "xai-oauth")
         xai = SimpleNamespace(_read_xai_oauth_tokens=tokens,
                               resolve_xai_oauth_runtime_credentials=lambda: self.fail("must not refresh"))
@@ -189,7 +196,7 @@ class HermesShimTests(unittest.TestCase):
         with patch.dict(sys.modules, {"hermes_cli": SimpleNamespace(auth=auth, auth_xai=xai),
                                       "hermes_cli.auth": auth, "hermes_cli.auth_xai": xai}), \
              patch.object(sys, "version_info", (3, 14)), patch.object(sys, "argv", ["-c", "refresh"]), \
-             patch.dict(os.environ, {"GROK_EXPECTED_EMAIL": "owner@example.invalid"}), \
+             patch.dict(os.environ, {"GROK_EXPECTED_EMAIL": "owner@example.com"}), \
              patch.object(sys, "stdout", output), self.assertRaises(SystemExit) as stopped:
             exec(provider._AUTH_SHIM.read_text(), {"__name__": "__main__"})
         self.assertEqual(stopped.exception.code, 1)
@@ -303,14 +310,19 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                 return Socket()
         fake = SimpleNamespace(ClientSession=HTTP, WSMsgType=Kind)
         def factory(**kwargs): return _GrokWireSession(aiohttp_module=fake, **kwargs)
+        tools = [{"type": "web_search"}, {"type": "x_search"}, {
+            "type": "mcp", "server_url": "https://mcp.example.com/mcp", "server_label": "manuals",
+            "allowed_tools": ["search_manual"], "headers": {"Authorization": "sample header"},
+        }]
         with patch("talk_grok_realtime._GrokWireSession", side_effect=factory):
-            wire = await provider.normal_oauth_cloud(instructions="Speak briefly")
+            wire = await provider.normal_oauth_cloud(instructions="Speak briefly", tools=tools)
             await wire.send_json(({"type": "input_audio_buffer.append", "audio": "AAAA"},))
             self.assertEqual((await wire.__anext__())["type"], "session.updated")
             await wire.close()
         self.assertEqual(connection["url"], "wss://api.x.ai/v1/realtime?model=grok-voice-latest")
         self.assertEqual(connection["headers"], {"Authorization": "Bearer fake-access"})
         self.assertEqual(sent[0]["type"], "session.update")
+        self.assertEqual(sent[0]["session"]["tools"], tools)
         self.assertEqual(sent[1]["type"], "input_audio_buffer.append")
         self.assertTrue(connection["closed"])
         self.assertIsNone(wire._auth_token)

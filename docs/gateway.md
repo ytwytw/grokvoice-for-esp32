@@ -3,7 +3,7 @@
 Run these commands from the repository root in a new terminal. Install the gateway
 with Python **3.12** and Git. For sign-in, prepare the [separate Hermes environment](provider.md)
 on Python **3.14**. Installation downloads public dependencies.
-Linux is the intended service host; the offline checks also run on macOS.
+Run the gateway on Linux.
 
 ## Install
 
@@ -51,7 +51,10 @@ computer cannot resolve that name. `--check` validates settings
 and imports the gateway dependencies. It also runs Git to check the Hermes
 revision and tracked files, then starts the configured Hermes Python interpreter
 to check its version and auth imports. It runs locally without reading tokens.
-Use a real call to verify account access and playback.
+After starting the gateway, follow the [conversation guide](user-guide.md).
+
+To add web search, X search or a remote MCP server, follow the [tools guide](tools.md)
+and set `GROK_TOOLS_FILE` before starting the gateway.
 
 ## Start
 
@@ -114,12 +117,11 @@ decide what to check first.
 | `account_mismatch`, `account_identity_unavailable` | Check the email in `GROK_EXPECTED_EMAIL` and the account you signed into. A missing email claim also stops the call. |
 | `xai_auth_missing`, `xai_refresh_failed` | Check that the gateway uses the same Hermes home as sign-in. If the session expired, sign in again with Hermes. |
 | `grok_handshake_401`, `grok_handshake_403` | Grok rejected the connection. Check sign-in for 401 and provider permission or account entitlement for 403. |
-| `format_rejected`, `session_rejected` | The service rejected setup or reported an incompatible audio format. Check the pinned provider versions. |
+| `format_rejected`, `session_rejected` | The service rejected setup or reported an incompatible audio format. If tools are enabled, remove the failing entry from the tools file and restart, or set the file to `[]` to retry without tools. Check the pinned provider versions if setup still fails. |
 | `provider_disconnected`, `provider_error` | The provider closed the connection or returned an error during the call. Check connectivity and account status. |
 | `response_failed`, `overlapping_response` | The reply was empty, incomplete or overlapped another reply. Start a new call. |
 | `playback_failed` | Check the speaker can reach the gateway's advertised HTTP address. |
 | A connection exception such as `TimeoutError` | Use the event name to locate the failure. Check the speaker's LAN connection for `device_connect_failed`, or the provider and reply path for `turn_failed`. |
 
 Do not share raw provider payloads, auth files, microphone recordings, account
-identifiers or environment dumps when reporting a problem. Offline tests passing
-cannot establish hardware or provider compatibility.
+identifiers or environment dumps when reporting a problem.

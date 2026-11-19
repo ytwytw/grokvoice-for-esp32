@@ -15,7 +15,9 @@ class EntrypointTests(unittest.IsolatedAsyncioTestCase):
         api_client = object()
         fake_wire = object()
 
-        async def cloud():
+        async def cloud(*, tools, header_vars):
+            self.assertEqual(header_vars, ("MANUALS_AUTH",))
+            self.assertEqual(tools, [{"type": "web_search"}])
             return fake_wire
 
         def start_http(replies, bind, port):
@@ -28,6 +30,7 @@ class EntrypointTests(unittest.IsolatedAsyncioTestCase):
             device = SimpleNamespace(audio_playing=False)
             bridge = bridge_factory(device)
             self.assertIs(await bridge.cloud_factory(), fake_wire)
+            self.assertEqual(bridge.first_audio_timeout, bridge.session_seconds)
             self.assertTrue(bridge.muted)
             self.assertEqual(bridge.followup_seconds, 8)
             self.assertIsInstance(bridge.replies, Replies)
@@ -41,7 +44,7 @@ class EntrypointTests(unittest.IsolatedAsyncioTestCase):
                  patch('gateway.bridge.connect_forever', connection), \
                  patch.object(loop, 'add_signal_handler'), \
                  patch.dict('os.environ', {'ESPHOME_NOISE_PSK': 'fake-local-key'}):
-                await run(args)
+                await run(args, [{"type": "web_search"}], ("MANUALS_AUTH",))
         factory.assert_called_once_with('voice-device.local', 6053, password=None,
                                         noise_psk='fake-local-key', client_info='grokvoice')
         self.assertEqual(servers[0].socket.fileno(), -1)
@@ -55,7 +58,8 @@ class EntrypointTests(unittest.IsolatedAsyncioTestCase):
 
         api, wire, servers, signals = FakeAPI(), FakeWire(), [], {}
 
-        async def cloud():
+        async def cloud(*, tools, header_vars):
+            self.assertFalse(tools)
             return wire
 
         def start_http(replies, bind, port):

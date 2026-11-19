@@ -8,18 +8,18 @@ The hardware/audio YAML and feedback layout are adapted from [ESPHome Home Assis
 
 The Voice Kit component is fetched directly from that same pinned public revision, at `esphome/components/voice_kit`. It resets/configures the XMOS audio processor over GPIO4 and I2C; it is required even though XMOS updating is disabled. No component runtime source is copied into this repository. Upstream C/C++ runtime is GPLv3 and Python/YAML is MIT under the upstream license; a locally compiled firmware is not entirely governed by this repository's own license. The recipe assumes a functioning existing Voice PE XMOS image and does not install, update or repair it.
 
-The only wake model is the official Voice PE selection, Kevin Ahrendt's [Okay Nabu `20241226.3`](https://github.com/kahrendt/microWakeWord/releases/tag/okay_nabu_20241226.3). ESPHome downloads it from the explicit release URL in `voice-pe.yaml`; no model bytes or custom wake training assets are shipped here. The release manifest names `okay_nabu.tflite` from that same release directory. Downloaded bytes were checked on 2026-11-18:
+The only wake model is the official Voice PE selection, Kevin Ahrendt's [Okay Nabu `20241226.3`](https://github.com/kahrendt/microWakeWord/releases/tag/okay_nabu_20241226.3). ESPHome downloads it from the explicit release URL in `voice-pe.yaml`; no model bytes or custom wake training assets are shipped here. The release manifest names `okay_nabu.tflite` from that same release directory. Source hashes:
 
 | Input | SHA-256 |
 | --- | --- |
 | [`okay_nabu.json`](https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.json) | `f8026e2ce93a0855ca23483036fd2d74ee924a2588d9ea6a6c6c7478fbf4be57` |
 | [`okay_nabu.tflite`](https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.tflite) | `d89128c4d16a72de429119fb2254ce46649553c2a24f5dd840175c80d7b9d094` |
 
-These hashes record the verified public inputs; ESPHome's remote model loader does not enforce SHA-256 against this table. Upstream release availability is required during a fresh configuration/build. See the model project's own terms before redistributing model files or compiled firmware.
+These hashes identify the public inputs; ESPHome's remote model loader does not enforce SHA-256 against this table. Upstream release availability is required during a fresh configuration/build. See the model project's own terms before redistributing model files or compiled firmware.
 
 ## Hardware retained
 
-The recipe preserves the Voice PE's ESP32-S3, 16 MB flash, octal 80 MHz PSRAM, XMOS control/reset, stereo microphone input (GPIO13/14/15), stereo speaker output (GPIO7/8/10), AIC3204 codec over GPIO5/6, speaker amplifier GPIO47, jack detect GPIO17, button GPIO0, hardware mute GPIO3, dial GPIO16/18 and 12-pixel LED ring GPIO21 powered by GPIO45. Microphone channel 0 remains the conversation channel; channel 1 feeds local Okay Nabu with the upstream gain factor of 4. Mixer/resampler/output settings remain those of the extracted audio recipe. The generic ESP32 board identifier does not make the wiring portable.
+The recipe preserves the Voice PE's ESP32-S3, 16 MB flash, octal 80 MHz PSRAM, XMOS control/reset, stereo microphone input (GPIO13/14/15), stereo speaker output (GPIO7/8/10), AIC3204 codec over GPIO5/6, speaker amplifier GPIO47, jack detect GPIO17, button GPIO0, hardware mute GPIO3, dial GPIO16/18 and 12-pixel LED ring GPIO21 powered by GPIO45. Microphone channel 0 remains the conversation channel; channel 1 feeds local Okay Nabu with the upstream gain factor of 4. Mixer/resampler/output settings follow the upstream audio recipe. The generic ESP32 board identifier does not make the wiring portable.
 
 ## Gateway native API contract
 
@@ -41,8 +41,8 @@ Button actions are distinct from wake detection. The wake callback never stops p
 
 While API-connected and unmuted, the microphone continuously sends audio to the local gateway; idle wake detection does not disable this LAN transport. The gateway must discard idle PCM without retention and open cloud upload only after accepting a button or permitted wake event. Muting stops the detector, voice-assistant capture and microphone, and emits Stop; it restarts capture only after unmuting with an API client connected.
 
-## Validation boundary
+## Configuration checks
 
-ESPHome `2026.10.2 config` passed on an isolated copy with generated tones and the dummy example credentials. It fetched the pinned Voice Kit component and the single official manifest/model and resolved the YAML include and media-file paths. The generator checks each WAV's channel count, sample width, rate and frame count after writing. Expected upstream warnings include Voice PE strapping-pin use, deprecated `rgb_order`, and the pinned component's missing optional `synchronous` annotation.
+Run `esphome config firmware/voice-pe.yaml` after generating the tones and filling in your local secrets. Configuration loads the pinned Voice Kit component and official wake model and resolves the YAML includes and media-file paths. The tone generator checks each WAV's channel count, sample width, rate and frame count after writing. ESPHome may report Voice PE strapping-pin use, deprecated `rgb_order`, and the pinned component's missing optional `synchronous` annotation.
 
-No firmware compilation, USB installation, flash, cloud call, wake recognition or hardware audio acceptance has been performed for this extracted recipe. A valid configuration is not evidence of successful linking, device boot, microphone/speaker calibration or an operational gateway.
+Follow the [build guide](../docs/build-and-run.md) to compile and install the firmware.
